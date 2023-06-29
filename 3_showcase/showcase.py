@@ -33,6 +33,7 @@ def count_personal_events(events, deputy_event, event_type):
 def count_personal_events_at_other_party_speaker(speeches, deputies, events, deputy_event, event_type):
     df_a = speeches.merge(deputies, left_on='speaker_id', right_index = True)[['speaker_id', 'fraktion', 'session_id']].rename(columns = {'fraktion':'speaker_party'})
     df_b = events.merge(df_a, left_on='speech_id', right_index=True)
+    df_b = df_b[df_b['event_type'] == event_type]
     df_b = df_b.merge(deputy_event, left_index=True, right_on='event_id')
     df_b = df_b[df_b['event_type'] == 2]
     df_c = df_b.merge(deputies[['fraktion']], left_on='deputy_id', right_index=True)
@@ -49,21 +50,42 @@ def count_party_events_per_party(events, event_party, event_type):
     return result
 
 
+def count_events_per_speaker(speeches, events, event_type):
+    df_a = events.merge(speeches, left_on='speech_id', right_index=True)
+    df_a = df_a[df_a['event_type'] == event_type]
+    result = df_a['speaker_id'].value_counts()
+    return result
+
+
+df_deputies_19['total_speeches'] = df_deputies_19.index.map(
+    df_speeches['speaker_id'].value_counts()
+).fillna(0).astype(int)
+
+df_deputies_19['sessions_attended'] = df_deputies_19.index.map(
+    dl_session_deputy['deputy_id'].value_counts()
+).fillna(0).astype(int)
+
 event_types = ['Beifall', 'Zwischenruf', 'Lachen', 'Zuruf', 'Widerspruch', 'Heiterkeit']
 for i in range(len(event_types)):
-    df_deputies_19[f'party_{event_types[i]}_count'] = df_deputies_19.index.map(
+    df_deputies_19[f'{event_types[i]}_party'] = df_deputies_19.index.map(
         count_party_events_per_deputy(df_deputies_19, df_events,df_speeches,dl_party_event,dl_session_deputy, i)
     ).fillna(0).astype(int)
 
-    df_deputies_19[f'person_{event_types[i]}_count'] = df_deputies_19.index.map(
+    df_deputies_19[f'{event_types[i]}_person'] = df_deputies_19.index.map(
         count_personal_events(df_events, dl_deputy_event, i)
     ).fillna(0).astype(int)
 
-    df_deputies_19[f'total_{event_types[i]}_count'] = df_deputies_19[f'person_{event_types[i]}_count'] + df_deputies_19[f'party_{event_types[i]}_count']
+    df_deputies_19[f'{event_types[i]}_total'] = df_deputies_19[f'{event_types[i]}_person'] + df_deputies_19[f'{event_types[i]}_party']
 
-    df_deputies_19[f'person_{event_types[i]}_count_other_party_speaker'] = df_deputies_19.index.map(
+    df_deputies_19[f'{event_types[i]}_person_other_party_speaker'] = df_deputies_19.index.map(
         count_personal_events_at_other_party_speaker(df_speeches, df_deputies, df_events, dl_deputy_event, i)
     ).fillna(0).astype(int)
+
+    df_deputies_19[f'{event_types[i]}_while_speaker'] = df_deputies_19.index.map(
+        count_events_per_speaker(df_speeches, df_events,i)
+    ).fillna(0).astype(int)
+
+    df_deputies_19[f'{event_types[i]}_per_speaker'] = df_deputies_19[f'{event_types[i]}_while_speaker'] / df_deputies_19['total_speeches']
 
     print(f'{event_types[i]}:')
     print(count_party_events_per_party(df_events, dl_party_event, i))
